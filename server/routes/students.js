@@ -1,26 +1,45 @@
 // Instantiate router - DO NOT MODIFY
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 
 // Import model(s)
-const { Student } = require('../db/models');
+const { Student } = require("../db/models");
 const { Op } = require("sequelize");
 
 // List
-router.get('/', async (req, res, next) => {
-    let errorResult = { errors: [], count: 0, pageCount: 0 };
+router.get("/", async (req, res, next) => {
+  let errorResult = { errors: [], count: 0, pageCount: 0 };
 
-    // Phase 2A: Use query params for page & size
-    // Your code here
+  // Phase 2A: Use query params for page & size
+  // Your code here
+  let page = req.query.page;
+  let size = req.query.size;
+  if (isNaN(page)) {
+    page = 1;
+  }
+  if (isNaN(size)) {
+    size = 10;
+  }
+  if (Number(page) === 0 && Number(size) === 0) {
+    let allStudents = await Student.findAll({
+      attributes: ["id", "firstName", "lastName", "leftHanded"],
+    });
+    return res.json(allStudents);
+  }
+  if (page < 0 || size < 0) {
+    errorResult.errors.push({ message: "Requires valid page and size params" });
+  }
+  let limit = size;
+  let offset = size * (page - 1);
 
-    // Phase 2B: Calculate limit and offset
-    // Phase 2B (optional): Special case to return all students (page=0, size=0)
-    // Phase 2B: Add an error message to errorResult.errors of
-        // 'Requires valid page and size params' when page or size is invalid
-    // Your code here
+  // Phase 2B: Calculate limit and offset
+  // Phase 2B (optional): Special case to return all students (page=0, size=0)
+  // Phase 2B: Add an error message to errorResult.errors of
+  // 'Requires valid page and size params' when page or size is invalid
+  // Your code here
 
-    // Phase 4: Student Search Filters
-    /*
+  // Phase 4: Student Search Filters
+  /*
         firstName filter:
             If the firstName query parameter exists, set the firstName query
                 filter to find a similar match to the firstName query parameter.
@@ -42,15 +61,38 @@ router.get('/', async (req, res, next) => {
                 message of 'Lefty should be either true or false' to
                 errorResult.errors
     */
-    const where = {};
+  const where = {};
 
-    // Your code here
-
-
-    // Phase 2C: Handle invalid params with "Bad Request" response
-    // Phase 3C: Include total student count in the response even if params were
-        // invalid
-        /*
+  // Your code here
+  const character = req.query.firstName;
+  if (character) {
+    where.firstName = {
+      [Op.like]: `%${character}%`,
+    };
+  }
+  const leftHanded = req.query.leftHanded;
+  if (leftHanded) {
+    if (leftHanded === "true") {
+      where.leftHanded = true;
+    } else if (leftHanded === "false") {
+      where.leftHanded = false;
+    } else {
+      errorResult.errors.push({
+        message: "Lefty should be either true or false.",
+      });
+    }
+  }
+  // Phase 2C: Handle invalid params with "Bad Request" response
+  if (errorResult.errors.length > 0) {
+    errorResult.count = 267;
+    return next({
+      status: 400,
+      message: errorResult,
+    });
+  }
+  // Phase 3C: Include total student count in the response even if params were
+  // invalid
+  /*
             If there are elements in the errorResult.errors array, then
             return a "Bad Request" response with the errorResult as the body
             of the response.
@@ -62,38 +104,46 @@ router.get('/', async (req, res, next) => {
                     pageCount: 0
                 }
         */
-    // Your code here
+  // Your code here
 
-    let result = {};
+  let result = {};
 
-    // Phase 3A: Include total number of results returned from the query without
-        // limits and offsets as a property of count on the result
-        // Note: This should be a new query
+  // Phase 3A: Include total number of results returned from the query without
+  // limits and offsets as a property of count on the result
+  // Note: This should be a new query
+  const count = await Student.count({ where });
+  result.count = count;
+  result.rows = await Student.findAll({
+    attributes: ["id", "firstName", "lastName", "leftHanded"],
+    where,
+    // Phase 1A: Order the Students search results
 
-    result.rows = await Student.findAll({
-        attributes: ['id', 'firstName', 'lastName', 'leftHanded'],
-        where,
-        // Phase 1A: Order the Students search results
-    });
+    order: [["lastName"], ["firstName"]],
+    limit,
+    offset,
+  });
 
-    // Phase 2E: Include the page number as a key of page in the response data
-        // In the special case (page=0, size=0) that returns all students, set
-            // page to 1
-        /*
+  // Phase 2E: Include the page number as a key of page in the response data
+  // In the special case (page=0, size=0) that returns all students, set
+  // page to 1
+  /*
             Response should be formatted to look like this:
             {
                 rows: [{ id... }] // query results,
                 page: 1
             }
         */
-    // Your code here
+  // Your code here
+  if (Number(page) === 0) {
+    page = 1;
+  }
 
-    // Phase 3B:
-        // Include the total number of available pages for this query as a key
-            // of pageCount in the response data
-        // In the special case (page=0, size=0) that returns all students, set
-            // pageCount to 1
-        /*
+  // Phase 3B:
+  // Include the total number of available pages for this query as a key
+  // of pageCount in the response data
+  // In the special case (page=0, size=0) that returns all students, set
+  // pageCount to 1
+  /*
             Response should be formatted to look like this:
             {
                 count: 17 // total number of query results without pagination
@@ -102,9 +152,10 @@ router.get('/', async (req, res, next) => {
                 pageCount: 10 // total number of available pages for this query
             }
         */
-    // Your code here
-
-    res.json(result);
+  // Your code here
+  result.page = page;
+  result.pageCount = Math.ceil(count / limit);
+  res.json(result);
 });
 
 // Export class - DO NOT MODIFY
